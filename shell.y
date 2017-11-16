@@ -38,10 +38,18 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+
+#include <sys/types.h>
+#include <pwd.h>
+
 #include "command.hh"
 
 void yyerror(const char * s);
 int yylex();
+
+char * envExpand(char * arg); 
+char * tildeExpand(char * arg);
 
 %}
 
@@ -84,8 +92,32 @@ argument_list:
 /*just the argument word*/
 argument:
   WORD {
-    /*printf("   Yacc: insert argument \"%s\"\n", $1); */
-    Command::_currentSimpleCommand->insertArgument( $1 );
+    /*printf("   Yacc: insert argument \"%s\"\n", $1);*/
+     
+    /*tilde expansion*/
+    char * check = tildeExpand($1);
+    if (check != NULL) {
+      $1 = strdup(check);
+      /*Command::_currentSimpleCommand->insertArgument( blank );*/
+    }
+    else {
+      /*Command::_currentSimpleCommand->insertArgument( $1 );*/
+    }
+    
+
+    /*enviornment expansion*/
+    check = envExpand($1);
+    if (check != NULL) {
+      /*char * blank = strdup(check);
+      Command::_currentSimpleCommand->insertArgument( blank );*/
+      $1 = strdup(check);
+      Command::_currentSimpleCommand->insertArgument( $1 );
+
+    }
+    else {
+      Command::_currentSimpleCommand->insertArgument( $1 );
+    }
+    
   }
   | QUOTES {
     memmove($1, $1+1, strlen($1));
@@ -172,73 +204,216 @@ background:
   ;
 
 
-/*
-
-
-goal:
-  commands
-  ;
-
-commands:
-  command
-  | commands command
-  ;
-
-command: 
-  simple_command
-  ;
-
-simple_command:	
-  command_and_args iomodifier_opt NEWLINE {
-    printf("   Yacc: Execute command\n");
-    Command::_currentCommand.execute();
-  }
-  | NEWLINE 
-  | error NEWLINE { yyerrok; }
-  ;
-
-command_and_args:
-  command_word argument_list {
-    Command::_currentCommand.
-    insertSimpleCommand( Command::_currentSimpleCommand );
-  }
-  ;
-
-argument_list:
-  argument_list argument
-  |  can be empty 
-  ;
-
-argument:
-  WORD {
-    printf("   Yacc: insert argument \"%s\"\n", $1);
-    Command::_currentSimpleCommand->insertArgument( $1 );\
-  }
-  ;
-
-command_word:
-  WORD {
-    printf("   Yacc: insert command \"%s\"\n", $1);
-    Command::_currentSimpleCommand = new SimpleCommand();
-    Command::_currentSimpleCommand->insertArgument( $1 );
-  }
-  ;
-
-iomodifier_opt:
-  GREAT WORD {
-    printf("   Yacc: insert output \"%s\"\n", $2);
-    Command::_currentCommand._outFile = $2;
-  }
-  |  can be empty 
-  ;
-
-*/
 
 
 %%
 
-void
-yyerror(const char * s)
+char * envExpand(char * arg) {
+  /*
+  -loop through arg until reaches the end
+  -check for $ and { and } and save locations
+  -save the part from before the $
+  -save the part after }
+  -create expansion
+  -cat the expansion and cat the end of the string
+  -replace arg with new string
+  -start over from the beginning of the string to look for more expands
+  */
+  
+  char * expanded = (char*)malloc(sizeof(char) * 512); /*store the new string*/
+  char * temp = strdup(arg); /*use to index throguh arg*/
+  int actually = 0; /*keep track of if you actually expanded*/
+  int i = 0; /*keep track of place in string*/
+  int length = strlen(arg) - 1; /*how much u loop for*/
+  int last = 0; /*where the last env was at so  know where to substring off of*/
+
+
+  while (i <= length) {
+    
+    /*expand if ${ */
+    if (temp[i] == '$' && temp[i + 1] == '{') {
+      /*only get the before characters if there are any*/
+      if ((i - last) > 0) {
+        char * before = (char*)malloc(sizeof(char) * 20); 
+        strncpy(before, temp + last, i - last);
+        
+        /*copy if first, append if not*/
+        if (expanded[0] == '\0') {
+          strcpy(expanded,  before);
+        }
+        else {
+          strcat(expanded, before);
+        }
+        free(before);
+      }
+
+      /*figure out where the end bracket is*/
+      int j = i;
+      char end = temp[j];
+      while (end != '}') {
+        j++;
+        end = temp[j];
+      }
+      last = j + 1;
+
+      /*get the enviornment variable*/
+      char * env = (char*)malloc(sizeof(char) * 20); 
+      strncpy(env, temp + i + 2, j - i - 2);
+      char * variable;
+      
+      /*pid of shell*/
+      if (strcmp(env, "$") == 0) {
+        variable = (char*)malloc(sizeof(char) * 5); 
+        sprintf(variable, "%d", getpid());
+      }
+      /*return code fo the last executed command*/
+      else if (strcmp(env, "?") == 0) {
+        variable = "?";
+      }
+      /*pid of the last process run in the background*/
+      else if (strcmp(env, "!") == 0) {
+        /*variable = (char*)malloc(sizeof(char) * 5); 
+        sprintf(variable, "%d", lastBackPid);*/
+        variable = "!";
+      }
+      /*last argument in the previous command*/
+      else if (strcmp(env, "_") == 0) {
+        variable = "_";
+      }
+      /*path to shell executable*/
+      else if (strcmp(env, "SHELL") == 0) {
+        variable = "/homes/escherre/cs252/lab3-src";
+      }
+      else {
+        variable = getenv(env);
+      }
+
+      free(env);
+      
+      /*copy if first, append if not*/
+      if (expanded[0] == '\0') {
+        strcpy(expanded,  variable);
+      }
+      else {
+         strcat(expanded, variable);
+      }
+
+      actually++;
+      i = j; /*move to after expansion*/
+    }
+
+    
+    i++;
+  }
+
+  /*if there was nothing to expand*/
+  if (actually == 0) {
+    return NULL;
+  }
+
+  /*append the last part of the string if its not at the end*/
+  if (temp[last] != '\0') {
+    char * end;
+    strncpy(end, temp + last, length - last + 1);
+    strcat(expanded, end);  
+  }
+
+  if (actually == 0) {
+    return NULL;
+  }
+  char * real = strdup(expanded);
+  /*free(expanded);*/
+  
+  return real;
+}
+
+char * tildeExpand(char * arg) {
+
+  int actually = 0;
+  char * expanded = (char*)malloc(sizeof(char) * 30);
+  char * end1 = (char*)malloc(sizeof(char) * 25);
+  
+  /*if just a ~*/
+  if (strcmp(arg, "~") == 0) {
+    expanded = strdup(getenv("HOME"));
+    return expanded;
+  }
+
+  char * full = (char*)malloc(sizeof(char) * 60);
+  /*if just ~/...*/
+  if (arg[0] == '~'  && arg[1] == '/') {
+    
+    int length = strlen(arg);
+
+    expanded = strdup(getenv("HOME"));
+    strcpy(full, expanded);
+
+    char * end = (char*)malloc(sizeof(char) * 25);
+    end =  arg + 1;
+    strcat(full, end);
+
+    return full;
+  }
+  /*if ~USER/... */
+  else if (arg[0] == '~') { 
+    
+    int i = 0;
+    int length = strlen(arg);
+
+    int start;
+    int nothing = 0;
+
+
+    /*find where the first / is*/
+    while (i < length) {
+      if (arg[i] == '/') {
+        start = i;
+        break;
+      }
+      i++;
+    }
+    if (i == length) {
+      start = i - 1;
+      nothing = -1;
+    }
+    
+    char * boi = (char*)malloc(sizeof(char) * 100);
+    
+    if (nothing == 0) {
+      char * username = (char*)malloc(sizeof(char) * 10);
+      strncpy(username, arg + 1, start - 1);
+
+      
+      expanded = strdup(getpwnam(username)->pw_dir);
+      strcpy(boi, expanded);
+
+      /*char * end1 = (char*)malloc(sizeof(char) * 25);*/
+      end1 = arg + start;
+
+      strcat(boi, end1);
+      
+      return boi;
+    }
+    /*if there is no end to cat*/
+    else {
+      char * username = arg + 1;
+
+      expanded = strdup(getpwnam(username)->pw_dir);
+      strcpy(full, expanded);
+    
+      return full;
+    }
+
+  }
+  
+
+  if (actually == 0) {
+    return NULL;
+  }
+
+}
+
+void yyerror(const char * s)
 {
   fprintf(stderr,"%s", s);
 }
