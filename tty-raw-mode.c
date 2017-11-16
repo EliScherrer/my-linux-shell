@@ -11,11 +11,14 @@
  * Also there is no automatic echo.
  */
 
+struct termios original;
+
 void tty_raw_mode(void)
 {
 	struct termios tty_attr;
      
 	tcgetattr(0,&tty_attr);
+	tcgetattr(0,&original);
 
 	/* Set raw mode. */
 	tty_attr.c_lflag &= (~(ICANON|ECHO));
@@ -23,4 +26,8 @@ void tty_raw_mode(void)
 	tty_attr.c_cc[VMIN] = 1;
      
 	tcsetattr(0,TCSANOW,&tty_attr);
+}
+
+void unset_raw(void) {
+	tcsetattr(0,TCSANOW,&original);
 }
