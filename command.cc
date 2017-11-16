@@ -21,6 +21,7 @@
 
 #include "command.hh"
 
+
 //command constructor
 Command::Command()
 {
@@ -38,6 +39,7 @@ Command::Command()
   _mro = 0;
   _mri = 0;
   _mre = 0;
+
 }
 
 //add a command to the _simpleCommands data structure
@@ -124,44 +126,20 @@ void Command::print() {
 	
 }
 
-/*handler for ctrl-c
-extern "C" void disp(int sig) {
-  fprintf(stderr, "\nsig:%d    Ouch!\n", sig);
-}*/
+/*
+-env variable expression
+   -do that shit in lex (or maybe yacc?)
+   -$? keep track of error codes in your code
+-wildcarding
+  -do that sit in yacc
+-history
+  -store it in a file
+-variable prompt
+  -shellrc needs to be working for this
 
-
-//printenv, you don't actually have to implement
-//setenv don't make a child process because it won't actually change the env variables
-//for source -> try to make it as your standard input
-
-//subshell
-  //- whatever is in backticks, run it in a subshell then return and then run the whole thing
-  //with it's output
-  //- use a regular expression in lex to find backticks
-  //- fork a child process and run execvp (proc/self/exec) <- this refrences the current process
-  //- pipe the command inside backticks from the parent to the subshell
-    //- use write command to write into fdpipe[1]
-    //- change the stdin for the subshell -> dup(fdpipe[0], 0)
-    //- also send a new line and the exit command so that after it finishes it exits
-  //- create a new pipe to pipe back the result from subshell to parent
-    //- change the stdout for the subshell -> dub(fdpipe[1], 1)
-    //- use read command to read from the reading end of the pipe
-    //- (unsure about this) how does the parent know when its done reading from the pipe? some sort of line terminator?
-  //- insert the output back in as an argument
-
+*/
 //do the actual work for a command
 void Command::execute() {
-	
-  /*handle ctrl-c
-  struct sigaction sa;
-  sa.sa_handler = disp;
-  sigemptyset(&sa.sa_mask);
-  sa.sa_flags = 0;
-
-  if (sigaction(SIGINT, &sa, NULL)) {
-    perror("sigaction");
-    exit(2);
-  }*/
 
 
   // Don't do anything if there are no simple commands
@@ -303,7 +281,32 @@ void Command::execute() {
     else if (!strcmp(_currentSimpleCommand->_arguments[0], "unsetenv")) {
       unsetenv(_currentSimpleCommand->_arguments[1]);
     }
+    //if you are trying to read from source let lex handle it 
+    else if (!strcmp(_currentSimpleCommand->_arguments[0], "source")) {
+
+      //fork new child process
+      pid = fork();
     
+      //error occured
+      if (pid == -1) {
+        perror ("fork fail");
+        exit(2);
+      }
+    
+      //fork successful
+      if (pid == 0) {
+        _currentSimpleCommand->_arguments++;
+        execvp(_currentSimpleCommand->_arguments[0], _currentSimpleCommand->_arguments);
+        //_currentSimpleCommand->_arguments[0] = (char*)"cat";
+        //execvp("cat", _currentSimpleCommand->_arguments);
+        
+        //execvp shouldn't return if it gets here something went wrong
+        perror("exec fail");
+        exit(2);
+      }
+    }
+
+
     //else normal command, go ahead and fork
     else {
       //fork new child process
@@ -317,7 +320,14 @@ void Command::execute() {
     
       //fork successful
       if (pid == 0) {
-      
+  
+        /*store the pid if it is in the background
+        if (_background) {
+          lastBackPid = getpid();
+          printf("pid: %d\n", lastBackPid);
+        }
+        */
+
         execvp(_currentSimpleCommand->_arguments[0], _currentSimpleCommand->_arguments);
 
         //execvp shouldn't return if it gets here something went wrong
@@ -353,9 +363,18 @@ void Command::execute() {
 }
 
 //function that gets called when ctrl-c is pressed
-extern "C" void disp(int sig) {
+extern "C" void ctrlc(int sig) {
   fprintf(stderr, "\nsig:%d    Ouch!\n", sig);
   Command::_currentCommand.prompt();
+}
+
+//function that gets called to eliminate zombies
+extern "C" void zombieKill(int sig) {
+  
+  //wait on any child process
+  //go until it returns something not a pid 
+  while (waitpid(-1 , NULL, WNOHANG) >= 1);
+
 }
 
 // Shell implementation
@@ -363,15 +382,25 @@ extern "C" void disp(int sig) {
 void Command::prompt() {
     
   //handle ctrl-c
-  struct sigaction sa;
-  sa.sa_handler = disp;
-  sigemptyset(&sa.sa_mask);
-  sa.sa_flags = SA_RESTART;
-  if(sigaction(SIGINT, &sa, NULL)){
+  struct sigaction saC;
+  saC.sa_handler = ctrlc;
+  sigemptyset(&saC.sa_mask);
+  saC.sa_flags = SA_RESTART;
+  if(sigaction(SIGINT, &saC, NULL)){
     perror("sigaction");
     exit(2);
   }
-  
+
+  //eliminate zombie processes
+  struct sigaction saZ;
+  saZ.sa_handler = zombieKill;
+  sigemptyset(&saZ.sa_mask);
+  saZ.sa_flags = SA_RESTART;
+  if(sigaction(SIGCHLD, &saZ, NULL)){
+    perror("sigaction");
+    exit(2);
+  }
+
   //prompt
   if ( isatty(0) ) {
     printf("myshell>");
