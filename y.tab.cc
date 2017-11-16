@@ -170,13 +170,21 @@ int yyparse (void);
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+
+#include <sys/types.h>
+#include <pwd.h>
+
 #include "command.hh"
 
 void yyerror(const char * s);
 int yylex();
 
+char * envExpand(char * arg); 
+char * tildeExpand(char * arg);
 
-#line 180 "y.tab.cc" /* yacc.c:358  */
+
+#line 188 "y.tab.cc" /* yacc.c:358  */
 
 #ifdef short
 # undef short
@@ -474,9 +482,9 @@ static const yytype_uint8 yytranslate[] =
   /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_uint8 yyrline[] =
 {
-       0,    51,    51,    56,    57,    62,    66,    67,    72,    80,
-      81,    86,    90,    99,   113,   118,   123,   129,   137,   146,
-     155,   156,   161,   162,   167,   171
+       0,    59,    59,    64,    65,    70,    74,    75,    80,    88,
+      89,    94,   122,   131,   145,   150,   155,   161,   169,   178,
+     187,   188,   193,   194,   199,   203
 };
 #endif
 
@@ -1268,49 +1276,73 @@ yyreduce:
   switch (yyn)
     {
         case 5:
-#line 62 "shell.y" /* yacc.c:1646  */
+#line 70 "shell.y" /* yacc.c:1646  */
     {
     /*printf("   Yacc: Execute command\n"); */
     Command::_currentCommand.execute();
   }
-#line 1277 "y.tab.cc" /* yacc.c:1646  */
+#line 1285 "y.tab.cc" /* yacc.c:1646  */
     break;
 
   case 7:
-#line 67 "shell.y" /* yacc.c:1646  */
+#line 75 "shell.y" /* yacc.c:1646  */
     { yyerrok; }
-#line 1283 "y.tab.cc" /* yacc.c:1646  */
-    break;
-
-  case 8:
-#line 72 "shell.y" /* yacc.c:1646  */
-    {
-    Command::_currentCommand.insertSimpleCommand( Command::_currentSimpleCommand );
-  }
 #line 1291 "y.tab.cc" /* yacc.c:1646  */
     break;
 
-  case 11:
-#line 86 "shell.y" /* yacc.c:1646  */
+  case 8:
+#line 80 "shell.y" /* yacc.c:1646  */
     {
-    /*printf("   Yacc: insert argument \"%s\"\n", $1); */
-    Command::_currentSimpleCommand->insertArgument( (yyvsp[0].string_val) );
+    Command::_currentCommand.insertSimpleCommand( Command::_currentSimpleCommand );
   }
-#line 1300 "y.tab.cc" /* yacc.c:1646  */
+#line 1299 "y.tab.cc" /* yacc.c:1646  */
+    break;
+
+  case 11:
+#line 94 "shell.y" /* yacc.c:1646  */
+    {
+    /*printf("   Yacc: insert argument \"%s\"\n", $1);*/
+     
+    /*tilde expansion*/
+    char * check = tildeExpand((yyvsp[0].string_val));
+    if (check != NULL) {
+      (yyvsp[0].string_val) = strdup(check);
+      /*Command::_currentSimpleCommand->insertArgument( blank );*/
+    }
+    else {
+      /*Command::_currentSimpleCommand->insertArgument( $1 );*/
+    }
+    
+
+    /*enviornment expansion*/
+    check = envExpand((yyvsp[0].string_val));
+    if (check != NULL) {
+      /*char * blank = strdup(check);
+      Command::_currentSimpleCommand->insertArgument( blank );*/
+      (yyvsp[0].string_val) = strdup(check);
+      Command::_currentSimpleCommand->insertArgument( (yyvsp[0].string_val) );
+
+    }
+    else {
+      Command::_currentSimpleCommand->insertArgument( (yyvsp[0].string_val) );
+    }
+    
+  }
+#line 1332 "y.tab.cc" /* yacc.c:1646  */
     break;
 
   case 12:
-#line 90 "shell.y" /* yacc.c:1646  */
+#line 122 "shell.y" /* yacc.c:1646  */
     {
     memmove((yyvsp[0].string_val), (yyvsp[0].string_val)+1, strlen((yyvsp[0].string_val)));
     (yyvsp[0].string_val)[strlen((yyvsp[0].string_val))-1] = '\0';
     Command::_currentSimpleCommand->insertArgument((yyvsp[0].string_val));
   }
-#line 1310 "y.tab.cc" /* yacc.c:1646  */
+#line 1342 "y.tab.cc" /* yacc.c:1646  */
     break;
 
   case 13:
-#line 99 "shell.y" /* yacc.c:1646  */
+#line 131 "shell.y" /* yacc.c:1646  */
     {
     /*printf("   Yacc: insert command \"%s\"\n", $1);*/
     /*end if exit command*/
@@ -1321,42 +1353,42 @@ yyreduce:
     Command::_currentSimpleCommand = new SimpleCommand();
     Command::_currentSimpleCommand->insertArgument( (yyvsp[0].string_val) );
   }
-#line 1325 "y.tab.cc" /* yacc.c:1646  */
+#line 1357 "y.tab.cc" /* yacc.c:1646  */
     break;
 
   case 14:
-#line 113 "shell.y" /* yacc.c:1646  */
+#line 145 "shell.y" /* yacc.c:1646  */
     {
     /*printf("   Yacc: insert output \"%s\"\n", $2); */
     Command::_currentCommand._outFile = (yyvsp[0].string_val);
     Command::_currentCommand._mro++;
   }
-#line 1335 "y.tab.cc" /* yacc.c:1646  */
+#line 1367 "y.tab.cc" /* yacc.c:1646  */
     break;
 
   case 15:
-#line 118 "shell.y" /* yacc.c:1646  */
+#line 150 "shell.y" /* yacc.c:1646  */
     {
     /*printf("   Yacc: insert input \"%s\"\n", $2); */
     Command::_currentCommand._inFile = (yyvsp[0].string_val);
     Command::_currentCommand._mri++;
   }
-#line 1345 "y.tab.cc" /* yacc.c:1646  */
+#line 1377 "y.tab.cc" /* yacc.c:1646  */
     break;
 
   case 16:
-#line 123 "shell.y" /* yacc.c:1646  */
+#line 155 "shell.y" /* yacc.c:1646  */
     {
     /*printf("   Yacc: append output \"%s\"\n", $2); */
     Command::_currentCommand._outFile = (yyvsp[0].string_val);
     Command::_currentCommand._append = 1;
     Command::_currentCommand._mro++;
   }
-#line 1356 "y.tab.cc" /* yacc.c:1646  */
+#line 1388 "y.tab.cc" /* yacc.c:1646  */
     break;
 
   case 17:
-#line 129 "shell.y" /* yacc.c:1646  */
+#line 161 "shell.y" /* yacc.c:1646  */
     {
     /*printf("   Yacc: insert output \"%s\"\n", $2); */
     /*printf("   Yacc: insert stdrr \"%s\"\n", $2); */
@@ -1365,11 +1397,11 @@ yyreduce:
     Command::_currentCommand._mro++;
     Command::_currentCommand._mre++;
   }
-#line 1369 "y.tab.cc" /* yacc.c:1646  */
+#line 1401 "y.tab.cc" /* yacc.c:1646  */
     break;
 
   case 18:
-#line 137 "shell.y" /* yacc.c:1646  */
+#line 169 "shell.y" /* yacc.c:1646  */
     {
     /*printf("   Yacc: append output \"%s\"\n", $2); */
     /*printf("   Yacc: append stdrr \"%s\"\n", $2); */
@@ -1379,30 +1411,30 @@ yyreduce:
     Command::_currentCommand._mro++;
     Command::_currentCommand._mre++;
   }
-#line 1383 "y.tab.cc" /* yacc.c:1646  */
+#line 1415 "y.tab.cc" /* yacc.c:1646  */
     break;
 
   case 19:
-#line 146 "shell.y" /* yacc.c:1646  */
+#line 178 "shell.y" /* yacc.c:1646  */
     {
     /*printf("   Yacc: insert stdrr \"%s\"\n", $2) */;
     Command::_currentCommand._errFile = (yyvsp[0].string_val);
     Command::_currentCommand._mre++;
   }
-#line 1393 "y.tab.cc" /* yacc.c:1646  */
+#line 1425 "y.tab.cc" /* yacc.c:1646  */
     break;
 
   case 24:
-#line 167 "shell.y" /* yacc.c:1646  */
+#line 199 "shell.y" /* yacc.c:1646  */
     {
     /*printf("   Yacc: perform in background \n");*/
     Command::_currentCommand._background = 1;
   }
-#line 1402 "y.tab.cc" /* yacc.c:1646  */
+#line 1434 "y.tab.cc" /* yacc.c:1646  */
     break;
 
 
-#line 1406 "y.tab.cc" /* yacc.c:1646  */
+#line 1438 "y.tab.cc" /* yacc.c:1646  */
       default: break;
     }
   /* User semantic actions sometimes alter yychar, and that requires
@@ -1630,11 +1662,215 @@ yyreturn:
 #endif
   return yyresult;
 }
-#line 238 "shell.y" /* yacc.c:1906  */
+#line 209 "shell.y" /* yacc.c:1906  */
 
 
-void
-yyerror(const char * s)
+char * envExpand(char * arg) {
+  /*
+  -loop through arg until reaches the end
+  -check for $ and { and } and save locations
+  -save the part from before the $
+  -save the part after }
+  -create expansion
+  -cat the expansion and cat the end of the string
+  -replace arg with new string
+  -start over from the beginning of the string to look for more expands
+  */
+  
+  char * expanded = (char*)malloc(sizeof(char) * 512); /*store the new string*/
+  char * temp = strdup(arg); /*use to index throguh arg*/
+  int actually = 0; /*keep track of if you actually expanded*/
+  int i = 0; /*keep track of place in string*/
+  int length = strlen(arg) - 1; /*how much u loop for*/
+  int last = 0; /*where the last env was at so  know where to substring off of*/
+
+
+  while (i <= length) {
+    
+    /*expand if ${ */
+    if (temp[i] == '$' && temp[i + 1] == '{') {
+      /*only get the before characters if there are any*/
+      if ((i - last) > 0) {
+        char * before = (char*)malloc(sizeof(char) * 20); 
+        strncpy(before, temp + last, i - last);
+        
+        /*copy if first, append if not*/
+        if (expanded[0] == '\0') {
+          strcpy(expanded,  before);
+        }
+        else {
+          strcat(expanded, before);
+        }
+        free(before);
+      }
+
+      /*figure out where the end bracket is*/
+      int j = i;
+      char end = temp[j];
+      while (end != '}') {
+        j++;
+        end = temp[j];
+      }
+      last = j + 1;
+
+      /*get the enviornment variable*/
+      char * env = (char*)malloc(sizeof(char) * 20); 
+      strncpy(env, temp + i + 2, j - i - 2);
+      char * variable;
+      
+      /*pid of shell*/
+      if (strcmp(env, "$") == 0) {
+        variable = (char*)malloc(sizeof(char) * 5); 
+        sprintf(variable, "%d", getpid());
+      }
+      /*return code fo the last executed command*/
+      else if (strcmp(env, "?") == 0) {
+        variable = "?";
+      }
+      /*pid of the last process run in the background*/
+      else if (strcmp(env, "!") == 0) {
+        /*variable = (char*)malloc(sizeof(char) * 5); 
+        sprintf(variable, "%d", lastBackPid);*/
+        variable = "!";
+      }
+      /*last argument in the previous command*/
+      else if (strcmp(env, "_") == 0) {
+        variable = "_";
+      }
+      /*path to shell executable*/
+      else if (strcmp(env, "SHELL") == 0) {
+        variable = "/homes/escherre/cs252/lab3-src";
+      }
+      else {
+        variable = getenv(env);
+      }
+
+      free(env);
+      
+      /*copy if first, append if not*/
+      if (expanded[0] == '\0') {
+        strcpy(expanded,  variable);
+      }
+      else {
+         strcat(expanded, variable);
+      }
+
+      actually++;
+      i = j; /*move to after expansion*/
+    }
+
+    
+    i++;
+  }
+
+  /*if there was nothing to expand*/
+  if (actually == 0) {
+    return NULL;
+  }
+
+  /*append the last part of the string if its not at the end*/
+  if (temp[last] != '\0') {
+    char * end;
+    strncpy(end, temp + last, length - last + 1);
+    strcat(expanded, end);  
+  }
+
+  if (actually == 0) {
+    return NULL;
+  }
+  char * real = strdup(expanded);
+  /*free(expanded);*/
+  
+  return real;
+}
+
+char * tildeExpand(char * arg) {
+
+  int actually = 0;
+  char * expanded = (char*)malloc(sizeof(char) * 30);
+  char * end1 = (char*)malloc(sizeof(char) * 25);
+  
+  /*if just a ~*/
+  if (strcmp(arg, "~") == 0) {
+    expanded = strdup(getenv("HOME"));
+    return expanded;
+  }
+
+  char * full = (char*)malloc(sizeof(char) * 60);
+  /*if just ~/...*/
+  if (arg[0] == '~'  && arg[1] == '/') {
+    
+    int length = strlen(arg);
+
+    expanded = strdup(getenv("HOME"));
+    strcpy(full, expanded);
+
+    char * end = (char*)malloc(sizeof(char) * 25);
+    end =  arg + 1;
+    strcat(full, end);
+
+    return full;
+  }
+  /*if ~USER/... */
+  else if (arg[0] == '~') { 
+    
+    int i = 0;
+    int length = strlen(arg);
+
+    int start;
+    int nothing = 0;
+
+
+    /*find where the first / is*/
+    while (i < length) {
+      if (arg[i] == '/') {
+        start = i;
+        break;
+      }
+      i++;
+    }
+    if (i == length) {
+      start = i - 1;
+      nothing = -1;
+    }
+    
+    char * boi = (char*)malloc(sizeof(char) * 100);
+    
+    if (nothing == 0) {
+      char * username = (char*)malloc(sizeof(char) * 10);
+      strncpy(username, arg + 1, start - 1);
+
+      
+      expanded = strdup(getpwnam(username)->pw_dir);
+      strcpy(boi, expanded);
+
+      /*char * end1 = (char*)malloc(sizeof(char) * 25);*/
+      end1 = arg + start;
+
+      strcat(boi, end1);
+      
+      return boi;
+    }
+    /*if there is no end to cat*/
+    else {
+      char * username = arg + 1;
+
+      expanded = strdup(getpwnam(username)->pw_dir);
+      strcpy(full, expanded);
+    
+      return full;
+    }
+
+  }
+  
+
+  if (actually == 0) {
+    return NULL;
+  }
+
+}
+
+void yyerror(const char * s)
 {
   fprintf(stderr,"%s", s);
 }
